@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Personal OS — Rubén</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#0ea5e9">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+    body {
+      background: #090d16;
+      color: #f1f5f9;
+      padding: 16px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .app-container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+    }
+    .brand { font-size: 1.1rem; font-weight: 700; color: #38bdf8; letter-spacing: 0.5px; }
+    .badge {
+      font-size: 0.75rem;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+    /* Tarjeta Reproductor */
+    .player-card {
+      background: linear-gradient(145deg, #131d31, #0f172a);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+    .briefing-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .briefing-title { font-size: 1.3rem; font-weight: 700; color: #ffffff; }
+    .briefing-subtitle { font-size: 0.85rem; color: #94a3b8; }
+
+    /* Barra de progreso */
+    .progress-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #334155;
+      border-radius: 3px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: #38bdf8;
+      border-radius: 3px;
+      transition: width 0.1s linear;
+    }
+    .time-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+
+    /* Botones de control */
+    .controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 24px;
+    }
+    .btn-circle {
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #f1f5f9;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.85rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    .btn-circle:active { transform: scale(0.92); }
+    .btn-play {
+      width: 68px;
+      height: 68px;
+      background: #0ea5e9;
+      color: #04101e;
+      font-size: 1.6rem;
+      border: none;
+      box-shadow: 0 6px 18px rgba(14, 165, 233, 0.4);
+    }
+
+    /* Tarjetas de Contenido */
+    .section-card {
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 18px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .section-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .transcript-box {
+      font-size: 0.92rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+      max-height: 160px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    /* Enlaces directos a alertas */
+    .alert-chip {
+      background: rgba(14, 165, 233, 0.12);
+      border: 1px solid rgba(14, 165, 233, 0.3);
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      text-decoration: none;
+      color: #f8fafc;
+      font-size: 0.85rem;
+      transition: background 0.15s;
+    }
+    .alert-chip:hover { background: rgba(14, 165, 233, 0.2); }
+    .alert-tag {
+      font-size: 0.7rem;
+      font-weight: 700;
+      background: #0284c7;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-right: 6px;
+    }
+
+    /* Módulo Noticias con Voto */
+    .news-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1e293b;
+      padding: 10px 14px;
+      border-radius: 12px;
+      gap: 12px;
+    }
+    .news-text { font-size: 0.85rem; color: #e2e8f0; line-height: 1.3; }
+    .vote-btns { display: flex; gap: 8px; }
+    .btn-vote {
+      background: transparent;
+      border: 1px solid #475569;
+      color: #94a3b8;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-vote.active-up { background: #059669; color: white; border-color: #059669; }
+    .btn-vote.active-down { background: #dc2626; color: white; border-color: #dc2626; }
+
+    /* Botón flotante para generar parte de prueba */
+    .btn-manual-sync {
+      background: transparent;
+      border: 1px dashed #475569;
+      color: #94a3b8;
+      padding: 10px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn-manual-sync:hover { border-color: #38bdf8; color: #38bdf8; }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <header>
+      <div class="brand">PERSONAL OS</div>
+      <div class="badge" id="status-badge">07:00 AM</div>
+    </header>
+
+    <!-- Reproductor Principal -->
+    <div class="player-card">
+      <div class="briefing-meta">
+        <div class="briefing-title" id="briefing-title">Boletín Matinal</div>
+        <div class="briefing-subtitle" id="briefing-date">Cargando reporte de hoy...</div>
+      </div>
+
+      <div class="progress-container">
+        <div class="progress-bar" id="progress-bar">
+          <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="time-labels">
+          <span id="current-time">0:00</span>
+          <span id="total-duration">--:--</span>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn-circle" id="btn-back" title="Rebobinar 10s">-10s</button>
+        <button class="btn-circle btn-play" id="btn-play">▶</button>
+        <button class="btn-circle" id="btn-fwd" title="Avanzar 10s">+10s</button>
+      </div>
+
+      <audio id="audio-element" preload="auto"></audio>
+    </div>
+
+    <!-- Transcripción -->
+    <div class="section-card">
+      <div class="section-title">Transcripción de Voz</div>
+      <div class="transcript-box" id="transcript-text">
+        Esperando la generación del parte diario...
+      </div>
+    </div>
+
+    <!-- Radar de Oposiciones y Empleo Detectado -->
+    <div class="section-card">
+      <div class="section-title">Oportunidades & Boletines</div>
+      <div id="alerts-container" style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="font-size: 0.85rem; color: #64748b;">No hay alertas pendientes hoy.</div>
+      </div>
+    </div>
+
+    <!-- Novedades & Feedback de Interés -->
+    <div class="section-card">
+      <div class="section-title">Valoración de Novedades</div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="news-item">
+          <div class="news-text">Nuevas metodologías en docencia de FP Sanitaria y simulación clínica.</div>
+          <div class="vote-btns">
+            <button class="btn-vote" onclick="vote(this, 'docencia_fp', true)">👍</button>
+            <button class="btn-vote" onclick="vote(this, 'docencia_fp', false)">👎</button>
+          </div>
+        </div>
+        <div class="news-item">
+          <div class="news-text">Avances en neurociencia del aprendizaje y memoria a largo plazo.</div>
+          <div class="vote-btns">
+            <button class="btn-vote" onclick="vote(this, 'neurociencia', true)">👍</button>
+            <button class="btn-vote" onclick="vote(this, 'neurociencia', false)">👎</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-manual-sync" id="btn-generate-now">
+      ⚡ Generar o actualizar boletín ahora
+    </button>
+  </div>
+
+  <script>
+    // Registro de Service Worker para PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/static/sw.js')
+        .then(() => console.log('Service Worker de Personal OS registrado.'));
+    }
+
+    const audio = document.getElementById('audio-element');
+    const btnPlay = document.getElementById('btn-play');
+    const btnBack = document.getElementById('btn-back');
+    const btnFwd = document.getElementById('btn-fwd');
+    const progressBar = document.getElementById('progress-bar');
+    const progressFill = document.getElementById('progress-fill');
+    const currentTimeEl = document.getElementById('current-time');
+    const totalDurationEl = document.getElementById('total-duration');
+    const transcriptText = document.getElementById('transcript-text');
+    const briefingDate = document.getElementById('briefing-date');
+    const alertsContainer = document.getElementById('alerts-container');
+    const btnGenerateNow = document.getElementById('btn-generate-now');
+
+    async function loadLatestBriefing() {
+      try {
+        const res = await fetch('/api/briefing/latest');
+        const data = await res.json();
+        
+        if (data.generated_at) {
+          const genDate = new Date(data.generated_at);
+          briefingDate.textContent = `Generado a las ${genDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        }
+        
+        if (data.script_text) {
+          transcriptText.textContent = data.script_text;
+        }
+
+        if (data.audio_url) {
+          audio.src = data.audio_url;
+        }
+
+        // Renderizar enlaces de DOGV / BOE y empleo
+        renderAlerts(data.official_alerts || [], data.job_alerts || []);
+
+      } catch (err) {
+        console.error('Error cargando boletín:', err);
+      }
+    }
+
+    function renderAlerts(official, jobs) {
+      alertsContainer.innerHTML = '';
+      const all = [];
+
+      official.forEach(o => {
+        all.push({
+          tag: o.source,
+          title: o.title || o.specialty,
+          url: o.url
+        });
+      });
+
+      jobs.forEach(j => {
+        all.push({
+          tag: 'EMPLEO',
+          title: `${j.role} (${j.center}) - ${j.hours}`,
+          url: j.url
+        });
+      });
+
+      if (all.length === 0) {
+        alertsContainer.innerHTML = '<div style="font-size:0.85rem; color:#64748b;">No hay publicaciones oficiales críticas hoy.</div>';
+        return;
+      }
+
+      all.forEach(item => {
+        const a = document.createElement('a');
+        a.className = 'alert-chip';
+        a.href = item.url;
+        a.target = '_blank';
+        a.innerHTML = `<span><span class="alert-tag">${item.tag}</span>${item.title}</span> <span>↗</span>`;
+        alertsContainer.appendChild(a);
+      });
+    }
+
+    // Controles de Reproducción
+    btnPlay.addEventListener('click', () => {
+      if (audio.paused) {
+        audio.play();
+        btnPlay.textContent = '⏸';
+      } else {
+        audio.pause();
+        btnPlay.textContent = '▶';
+      }
+    });
+
+    audio.addEventListener('timeupdate', () => {
+      const current = audio.currentTime;
+      const duration = audio.duration || 1;
+      const pct = (current / duration) * 100;
+      progressFill.style.width = `${pct}%`;
+      currentTimeEl.textContent = formatTime(current);
+    });
+
+    audio.addEventListener('loadedmetadata', () => {
+      totalDurationEl.textContent = formatTime(audio.duration);
+    });
+
+    audio.addEventListener('ended', () => {
+      btnPlay.textContent = '▶';
+      progressFill.style.width = '0%';
+    });
+
+    btnBack.addEventListener('click', () => { audio.currentTime = Math.max(0, audio.currentTime - 10); });
+    btnFwd.addEventListener('click', () => { audio.currentTime = Math.min(audio.duration, audio.currentTime + 10); });
+
+    progressBar.addEventListener('click', (e) => {
+      const rect = progressBar.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const width = rect.width;
+      audio.currentTime = (clickX / width) * audio.duration;
+    });
+
+    function formatTime(secs) {
+      if (isNaN(secs)) return '0:00';
+      const m = Math.floor(secs / 60);
+      const s = Math.floor(secs % 60);
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    // Votación 👍 / 👎
+    async function vote(btn, topic, isPositive) {
+      const parent = btn.parentElement;
+      const btns = parent.querySelectorAll('.btn-vote');
+      btns.forEach(b => b.classList.remove('active-up', 'active-down'));
+
+      if (isPositive) {
+        btn.classList.add('active-up');
+      } else {
+        btn.classList.add('active-down');
+      }
+
+      console.log(`Voto registrado para ${topic}: ${isPositive ? 'Relevante' : 'Descartar'}`);
+      await fetch('/api/profile/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, positive: isPositive, timestamp: new Date().toISOString() })
+      });
+    }
+
+    btnGenerateNow.addEventListener('click', async () => {
+      btnGenerateNow.textContent = '⏳ Generando locución y recopilando datos...';
+      try {
+        await fetch('/api/briefing/trigger-manual', { method: 'POST' });
+        await loadLatestBriefing();
+        btnGenerateNow.textContent = '✅ Boletín actualizado con éxito';
+        setTimeout(() => { btnGenerateNow.textContent = '⚡ Generar o actualizar boletín ahora'; }, 2500);
+      } catch (e) {
+        btnGenerateNow.textContent = '❌ Error al generar';
+      }
+    });
+
+    // Cargar inicial
+    loadLatestBriefing();
+  </script>
+</body>
+</html>
