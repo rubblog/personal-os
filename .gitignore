@@ -1,0 +1,18 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales
+.venv/
+venv/
+ENV/
+
+# Credenciales y secretos privados de Google
+credentials.json
+token.json
+.env
+
+# Archivos de audio generados en local (se regeneran en el servidor)
+static/audio/*.mp3
+!static/audio/.gitkeep
