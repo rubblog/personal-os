@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 class BriefingComposer:
     """
     Ensamblador del guión de radio en español (< 120 segundos).
-    Unifica meteorología, agenda, tráfico, oposiciones (DOGV/BOE) y empleo FP.
+    Unifica meteorología real, Google Calendar real, tráfico y alertas contrastadas.
     """
     @staticmethod
     def compose_script(
@@ -35,29 +35,32 @@ class BriefingComposer:
             f"Son las {hora_str} de la mañana."
         ]
 
-        # 2. Meteorología práctica (El Osito y perros)
+        # 2. Meteorología práctica
         if weather_info and "summary" in weather_info:
             script_parts.append(weather_info["summary"])
 
         # 3. Tráfico hacia la Base Militar Jaime I
         script_parts.append(traffic_info)
 
-        # 4. Agenda y compromisos
-        if calendar_events:
-            event_descriptions = []
-            for ev in calendar_events:
-                summary = ev.get("summary", "")
-                start = ev.get("start", "")
-                if "16:00" in start or "Hospital" in summary or "médico" in summary.lower():
-                    event_descriptions.append(f"Esta tarde tienes {summary.lower()} a las cuatro.")
-                elif "trabajo" in summary.lower() or "universidad" in summary.lower():
-                    event_descriptions.append(f"Recuerda revisar la entrega pendiente: {summary.lower()}.")
-                else:
-                    event_descriptions.append(f"Tienes programado: {summary}.")
+        # 4. Agenda Real de Google Calendar
+        today_events = [e for e in (calendar_events or []) if e.get("is_today")]
+        upcoming_events = [e for e in (calendar_events or []) if not e.get("is_today")]
 
-            script_parts.append(" ".join(event_descriptions))
+        if today_events:
+            event_texts = []
+            for ev in today_events:
+                summary = ev.get("summary", "")
+                event_texts.append(f"Para hoy tienes anotado: {summary}.")
+            script_parts.append(" ".join(event_texts))
         else:
-            script_parts.append("No tienes compromisos urgentes en tu calendario hoy.")
+            script_parts.append("Hoy no tienes citas urgentes en tu agenda.")
+
+        # Anticipación de compromisos próximos (próximos días: exámenes, entregas, cumpleaños)
+        if upcoming_events:
+            next_ev = upcoming_events[0]
+            summary = next_ev.get("summary", "")
+            start = next_ev.get("start", "")
+            script_parts.append(f"Ten presente en el horizonte próximo: {summary}.")
 
         # 5. Oposiciones y Boletines Oficiales (DOGV / BOE)
         if official_alerts:
@@ -72,7 +75,7 @@ class BriefingComposer:
         else:
             script_parts.append("En el DOGV y el BOE no hay novedades de tus especialidades hoy.")
 
-        # 6. Radar de Empleo Privado / Remoto FP
+        # 6. Empleo Docente FP (Solo si hay alertas reales contrastadas)
         if job_alerts:
             job_items = []
             for job in job_alerts:
@@ -80,6 +83,8 @@ class BriefingComposer:
                     f"En empleo: vacante en {job.get('center')} para {job.get('role')} ({job.get('hours')})."
                 )
             script_parts.append(" ".join(job_items))
+        else:
+            script_parts.append("Tampoco hay vacantes de FP que cumplan tus filtros en los centros monitoreados.")
 
         # 7. Cierre
         script_parts.append("¡Que tengas un excelente día!")
