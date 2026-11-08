@@ -1,13 +1,12 @@
+import zoneinfo
 from datetime import datetime
 from typing import Dict, Any, List
 
 class BriefingComposer:
     """
     Ensamblador del guión de radio en español (< 120 segundos).
-    Aplica las reglas de máxima concisión:
-    1. Si no hay publicaciones en BOE/DOGV -> No dice nada.
-    2. Si no hay ofertas de empleo en FP -> No dice nada.
-    3. Fines de semana (sábado/domingo) -> No menciona el tráfico hacia el trabajo.
+    Corrige estrictamente el huso horario a Europe/Madrid y el saludo
+    (días, tardes, noches).
     """
     @staticmethod
     def compose_script(
@@ -27,24 +26,52 @@ class BriefingComposer:
             7: "julio", 8: "agosto", 9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
         }
 
-        now = datetime.now()
+        # 1. Huso horario estricto de Valencia (Europe/Madrid)
+        tz = zoneinfo.ZoneInfo("Europe/Madrid")
+        now = datetime.now(tz)
+        
         dia_num = now.weekday()
         dia_nombre = dias_semana[dia_num]
         mes_nombre = meses[now.month]
-        hora_str = now.strftime("%H:%M")
-        is_weekend = dia_num in [5, 6] # Sábado o Domingo
+        hora = now.hour
+        minuto = now.minute
+        is_weekend = dia_num in [5, 6]
 
-        # 1. Saludo y contexto temporal
+        # Saludo y franja horaria natural en español
+        if 6 <= hora < 12:
+            saludo = f"Buenos días {user_name}"
+            franja = "de la mañana"
+        elif 12 <= hora < 20:
+            saludo = f"Buenas tardes {user_name}"
+            franja = "de la tarde"
+        else:
+            saludo = f"Buenas noches {user_name}"
+            franja = "de la noche"
+
+        # Conversión a formato 12h natural para la voz (ej: "las cuatro y cuatro de la tarde")
+        hora_12 = hora if hora <= 12 else hora - 12
+        if hora_12 == 0: hora_12 = 12
+        hora_palabra = "la una" if hora_12 == 1 else f"las {hora_12}"
+        
+        if minuto == 0:
+            tiempo_oral = f"Son {hora_palabra} en punto {franja}"
+        elif minuto == 15:
+            tiempo_oral = f"Son {hora_palabra} y cuarto {franja}"
+        elif minuto == 30:
+            tiempo_oral = f"Son {hora_palabra} y media {franja}"
+        else:
+            tiempo_oral = f"Son {hora_palabra} y {minuto} {franja}"
+
         script_parts = [
-            f"Buenos días {user_name}. Hoy es {dia_nombre} {now.day} de {mes_nombre}.",
-            f"Son las {hora_str} de la mañana."
+            f"{saludo}. Hoy es {dia_nombre} {now.day} de {mes_nombre}.",
+            f"{tiempo_oral}."
         ]
 
-        # 2. Meteorología práctica (El Osito y perros)
+        # 2. Meteorología práctica (El Osito)
         if weather_info and "summary" in weather_info:
             script_parts.append(weather_info["summary"])
 
-        # 3. Tráfico laboral (Solo en días laborables de lunes a viernes)
+        # 3. Tráfico laboral (Solo días laborables L-V)
         if not is_weekend:
             script_parts.append(traffic_info)
 
@@ -62,14 +89,13 @@ class BriefingComposer:
             if not is_weekend:
                 script_parts.append("Hoy no tienes citas urgentes en tu agenda.")
 
-        # Próximos compromisos (exámenes, entregas de universidad, etc.)
+        # Próximos compromisos
         if upcoming_events:
             next_ev = upcoming_events[0]
             summary = next_ev.get("summary", "")
             script_parts.append(f"Ten presente en el horizonte próximo: {summary}.")
 
-        # 5. Oposiciones y Boletines Oficiales (DOGV / BOE)
-        # REGLA: Si NO hay novedades, silencio total (no dice nada).
+        # 5. Oposiciones y Boletines Oficiales (Silencio si no hay nada)
         if official_alerts:
             alert_items = []
             for alert in official_alerts:
@@ -80,8 +106,7 @@ class BriefingComposer:
                     alert_items.append(f"Novedad en el BOE: convocatoria para {alert.get('category', 'M2 Biología')}.")
             script_parts.append(" ".join(alert_items))
 
-        # 6. Empleo Docente FP
-        # REGLA: Si NO hay vacantes, silencio total (no dice nada).
+        # 6. Empleo FP (Silencio si no hay nada)
         if job_alerts:
             job_items = []
             for job in job_alerts:
@@ -90,7 +115,7 @@ class BriefingComposer:
                 )
             script_parts.append(" ".join(job_items))
 
-        # 7. Cierre
+        # 7. Cierre natural
         if is_weekend:
             script_parts.append("¡Disfruta del fin de semana!")
         else:
