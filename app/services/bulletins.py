@@ -1,7 +1,8 @@
-import logging
 import requests
+import re
 import xml.etree.ElementTree as ET
-from datetime import datetime
+import logging
+from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
 logger = logging.getLogger("personal_os.bulletins")
@@ -9,11 +10,10 @@ logger = logging.getLogger("personal_os.bulletins")
 class BulletinsService:
     """
     Servicio de vigilancia oficial para DOGV y BOE.
-    Utiliza las APIs públicas y sumarios XML diarios sin coste de IA.
-    Aplica filtros deterministas basados en el perfil de Rubén.
+    Utiliza APIs y páginas de sumario reales.
     """
     BOE_API_URL = "https://www.boe.es/datosabiertos/api/boe/sumario"
-    DOGV_RSS_URL = "https://dogv.gva.es/es/rss"
+    DOGV_SUMARIO_URL = "https://dogv.gva.es/es/sumari-dogv"
 
     def __init__(self, boe_rules: Dict[str, Any], dogv_rules: Dict[str, Any]):
         self.boe_rules = boe_rules
@@ -21,14 +21,23 @@ class BulletinsService:
 
     def scan_boe_today(self) -> List[Dict[str, Any]]:
         """
-        Escanea el sumario del BOE del día buscando:
+        Escanea el sumario del BOE del último día hábil buscando:
         - Promoción Interna
         - Personal Laboral Fijo (Convenio Único AGE)
         - Grupo M2 (Biología / Investigación)
         - Provincia de Valencia
         """
-        today_str = datetime.now().strftime("%Y%m%d")
-        url = f"{self.BOE_API_URL}/{today_str}"
+        # Si hoy es domingo o sábado, busca el último viernes
+        now = datetime.now()
+        if now.weekday() == 6: # Domingo
+            target_date = now - timedelta(days=2)
+        elif now.weekday() == 5: # Sábado
+            target_date = now - timedelta(days=1)
+        else:
+            target_date = now
+
+        date_str = target_date.strftime("%Y%m%d")
+        url = f"{self.BOE_API_URL}/{date_str}"
         headers = {"Accept": "application/xml"}
 
         matches = []
@@ -36,66 +45,55 @@ class BulletinsService:
             res = requests.get(url, headers=headers, timeout=12)
             if res.status_code == 200:
                 root = ET.fromstring(res.content)
-                # Buscar en la sección II-B (Oposiciones y concursos)
-                for item in root.findall(".//diario/seccion[@num='2B']//item"):
-                    titulo = (item.findtext("titulo") or "").lower()
-                    url_pdf = item.findtext("url_pdf") or ""
-                    
-                    # Filtros obligatorios de perfil
-                    is_m2 = "m2" in titulo or "grupo m2" in titulo
-                    is_bio = "biolog" in titulo or "investigaci" in titulo or "biomedic" in titulo
-                    is_promocion = "promoción interna" in titulo or "promocion interna" in titulo
-                    is_laboral = "laboral" in titulo or "convenio único" in titulo
-                    is_valencia = "valencia" in titulo or "valència" in titulo
+                for seccion in root.findall(".//diario/seccion"):
+                    if seccion.attrib.get("codigo") == "2B":
+                        for item in seccion.findall(".//item"):
+                            titulo = (item.findtext("titulo") or "").lower()
+                            url_pdf = item.findtext("url_pdf") or ""
 
-                    if is_m2 and is_bio and is_promocion and is_laboral and is_valencia:
-                        matches.append({
-                            "source": "BOE",
-                            "title": item.findtext("titulo"),
-                            "url": f"https://www.boe.es{url_pdf}" if url_pdf else "https://www.boe.es",
-                            "category": "M2 Biología (Promoción Interna - Valencia)"
-                        })
+                            # Filtros obligatorios de perfil
+                            is_m2 = "m2" in titulo or "grupo m2" in titulo
+                            is_bio = any(k in titulo for k in ["biolog", "investigaci", "biomedic"])
+                            is_promocion = "promoción interna" in titulo or "promocion interna" in titulo
+                            is_valencia = "valencia" in titulo or "valència" in titulo
+
+                            if is_m2 and is_bio and is_promocion and is_valencia:
+                                matches.append({
+                                    "source": "BOE",
+                                    "title": item.findtext("titulo"),
+                                    "url": f"https://www.boe.es{url_pdf}" if url_pdf else "https://www.boe.es",
+                                    "category": "M2 Biología (Promoción Interna - Valencia)"
+                                })
         except Exception as e:
-            logger.warning(f"No se pudo consultar el BOE del día ({e}).")
+            logger.warning(f"Error consultando el BOE ({e})")
 
         return matches
 
     def scan_dogv_today(self) -> List[Dict[str, Any]]:
         """
-        Escanea el DOGV buscando las 3 especialidades docentes de FP Sanidad:
-        1. Procesos Sanitarios
-        2. Procedimientos de Diagnóstico Clínico y Ortoprotésico
-        3. Procedimientos Sanitarios y Asistenciales
+        Escanea el sumario del DOGV mediante el portal oficial buscando las 3 especialidades docentes.
         """
         target_specialties = self.dogv_rules.get("target_specialties", [])
         matches = []
 
         try:
-            res = requests.get(self.DOGV_RSS_URL, timeout=12)
+            res = requests.get(self.DOGV_SUMARIO_URL, timeout=12)
             if res.status_code == 200:
-                root = ET.fromstring(res.content)
-                channel = root.find("channel")
-                if channel is not None:
-                    for item in channel.findall("item"):
-                        title = (item.findtext("title") or "").lower()
-                        desc = (item.findtext("description") or "").lower()
-                        link = item.findtext("link") or "https://dogv.gva.es"
-
-                        content = f"{title} {desc}"
-
-                        # Comprobar si coincide con alguna de las 3 especialidades
-                        for spec in target_specialties:
-                            keywords = spec.get("keywords", [])
-                            if any(k.lower() in content for k in keywords):
-                                matches.append({
-                                    "source": "DOGV",
-                                    "specialty": spec.get("name"),
-                                    "title": item.findtext("title"),
-                                    "url": link
-                                })
-                                break
+                html = res.text.lower()
+                for spec in target_specialties:
+                    name = spec.get("name", "")
+                    keywords = spec.get("keywords", [])
+                    for kw in keywords:
+                        if kw.lower() in html:
+                            matches.append({
+                                "source": "DOGV",
+                                "specialty": name,
+                                "title": f"Publicación detectada sobre {name}",
+                                "url": self.DOGV_SUMARIO_URL
+                            })
+                            break
         except Exception as e:
-            logger.warning(f"No se pudo consultar el RSS del DOGV ({e}).")
+            logger.warning(f"Error consultando DOGV ({e})")
 
         return matches
 
