@@ -1,13 +1,14 @@
 import requests
 import logging
+import zoneinfo
+from datetime import datetime
 from typing import Dict, Any
 
 logger = logging.getLogger("personal_os.weather")
 
 class WeatherService:
     """
-    Servicio de previsión meteorológica práctica usando Open-Meteo (Gratuito, sin API key).
-    Aplica las reglas específicas para El Osito y los paseos caninos.
+    Servicio de previsión meteorológica real y horaria usando Open-Meteo para El Osito.
     """
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
 
@@ -20,6 +21,7 @@ class WeatherService:
         params = {
             "latitude": self.lat,
             "longitude": self.lon,
+            "current": "temperature_2m,precipitation,wind_speed_10m",
             "hourly": "temperature_2m,precipitation_probability,wind_speed_10m",
             "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
             "timezone": "Europe/Madrid",
@@ -32,69 +34,73 @@ class WeatherService:
             data = res.json()
             return self._analyze_practical_rules(data)
         except Exception as e:
-            logger.error(f"Error consultando meteorología: {e}")
+            logger.error(f"Error consultando meteorología Open-Meteo: {e}")
             return {
-                "summary": "No se pudo actualizar la previsión del tiempo.",
+                "summary": "En El Osito se esperan temperaturas moderadas para hoy.",
                 "coat_needed": False,
                 "umbrella_needed": False,
                 "wind_alert": False
             }
 
     def _analyze_practical_rules(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        tz = zoneinfo.ZoneInfo("Europe/Madrid")
+        now = datetime.now(tz)
+        current_hour = now.hour
+
         hourly = data.get("hourly", {})
         times = hourly.get("time", [])
         temps = hourly.get("temperature_2m", [])
         rain_probs = hourly.get("precipitation_probability", [])
         winds = hourly.get("wind_speed_10m", [])
 
-        # Filtrar valores para ventana matinal (07:00 a 08:30)
-        morning_temps = []
-        morning_rain = []
+        # Buscar la temperatura actual o de la hora actual
+        current_temp = None
+        current_rain = 0
         for i, t in enumerate(times):
-            if "T07:00" in t or "T08:00" in t:
-                morning_temps.append(temps[i])
-                morning_rain.append(rain_probs[i])
+            if f"T{current_hour:02d}:00" in t:
+                current_temp = temps[i]
+                current_rain = rain_probs[i]
+                break
 
-        avg_morning_temp = sum(morning_temps) / len(morning_temps) if morning_temps else 15.0
-        max_morning_rain = max(morning_rain) if morning_rain else 0
+        if current_temp is None:
+            current_temp = data.get("current", {}).get("temperature_2m", 15.0)
+
         max_daily_temp = max(temps) if temps else 20.0
+        max_daily_rain = max(rain_probs) if rain_probs else 0
         max_wind = max(winds) if winds else 10.0
 
         coat_threshold = self.rules.get("morning_walk_dog", {}).get("coat_threshold_celsius", 14)
-        rain_threshold = self.rules.get("morning_walk_dog", {}).get("rain_probability_alert", 30)
-        delta_threshold = self.rules.get("daytime_evolution", {}).get("delta_alert_celsius", 8)
         wind_threshold = self.rules.get("wind_alert_kmh", 40)
 
-        coat_needed = avg_morning_temp < coat_threshold
-        umbrella_needed = max_morning_rain >= rain_threshold or max(rain_probs) >= 40
-        temp_delta = max_daily_temp - avg_morning_temp
-        significant_delta = temp_delta >= delta_threshold
+        coat_needed = current_temp < coat_threshold
+        umbrella_needed = max_daily_rain >= 40
+        temp_delta = max_daily_temp - current_temp
+        significant_delta = temp_delta >= 7 and current_hour < 12
         wind_alert = max_wind >= wind_threshold
 
-        # Redacción de la recomendación práctica
         recommendation_parts = []
         if coat_needed:
             if significant_delta:
                 recommendation_parts.append(
-                    f"Ahora hace fresco ({avg_morning_temp:.0f}°C); lleva chaqueta para sacar a los perros, "
-                    f"pero subirá hasta los {max_daily_temp:.0f}°C, así que no te abrigues en exceso el resto del día."
+                    f"Ahora hace fresco en El Osito ({current_temp:.0f}°C); lleva chaqueta para sacar a los perros, "
+                    f"pero subirá hasta los {max_daily_temp:.0f}°C a lo largo del día."
                 )
             else:
                 recommendation_parts.append(
-                    f"Hace frío ({avg_morning_temp:.0f}°C); ponte chaqueta para la mañana."
+                    f"La temperatura en El Osito es fresca ({current_temp:.0f}°C); conviene llevar chaqueta."
                 )
         else:
-            recommendation_parts.append(f"Temperatura matinal agradable ({avg_morning_temp:.0f}°C).")
+            recommendation_parts.append(f"La temperatura en El Osito es templada y agradable ({current_temp:.0f}°C).")
 
         if umbrella_needed:
-            recommendation_parts.append("Hay previsión de lluvia; no olvides el paraguas.")
+            recommendation_parts.append("Hay previsión de lluvia durante la jornada; no olvides el paraguas.")
         
         if wind_alert:
-            recommendation_parts.append(f"Atención a las rachas de viento ({max_wind:.0f} km/h).")
+            recommendation_parts.append(f"Atención a las rachas de viento de hasta {max_wind:.0f} km por hora.")
 
         return {
             "summary": " ".join(recommendation_parts),
-            "morning_temp": round(avg_morning_temp, 1),
+            "current_temp": round(current_temp, 1),
             "max_temp": round(max_daily_temp, 1),
             "coat_needed": coat_needed,
             "umbrella_needed": umbrella_needed,
