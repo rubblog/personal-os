@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "last_updated": "2026-11-08",
+  "user": {
+    "name": "Rubén",
+    "timezone": "Europe/Madrid",
+    "alarm_time": "07:00",
+    "schedule_days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+  },
+  "geography": {
+    "home_base": {
+      "name": "Residencia (Zona El Osito)",
+      "municipality": "La Pobla de Vallbona / L'Eliana",
+      "region": "Camp de Túria, Valencia",
+      "latitude": 39.5768,
+      "longitude": -0.5283
+    },
+    "work_base": {
+      "name": "Base Militar Jaime I",
+      "municipality": "Bétera",
+      "region": "Camp de Túria, Valencia",
+      "latitude": 39.5912,
+      "longitude": -0.4631
+    },
+    "commute": {
+      "preferred_route": ["CV-35", "CV-336"],
+      "standard_duration_minutes": 15,
+      "alert_delay_threshold_minutes": 5
+    }
+  },
+  "audio_bulletin": {
+    "format": "radio_briefing",
+    "max_duration_seconds": 120,
+    "speed": 1.0,
+    "voice_locale": "es-ES",
+    "retention_hours": 24,
+    "controls": {
+      "skip_seconds": 10,
+      "show_transcript": true,
+      "direct_links_enabled": true
+    }
+  },
+  "modules": {
+    "weather": {
+      "enabled": true,
+      "provider": "open-meteo",
+      "practical_rules": {
+        "morning_walk_dog": {
+          "time_window": "07:00-08:30",
+          "coat_threshold_celsius": 14,
+          "rain_probability_alert": 30
+        },
+        "daytime_evolution": {
+          "delta_alert_celsius": 8
+        },
+        "wind_alert_kmh": 40
+      }
+    },
+    "agenda": {
+      "enabled": true,
+      "source": "google_calendar",
+      "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
+      "conflict_detection": true,
+      "include_tasks": true,
+      "include_birthdays": true
+    },
+    "official_bulletins": {
+      "enabled": true,
+      "dogv": {
+        "scope": "Conselleria d'Educació / Formació Professional",
+        "target_specialties": [
+          {
+            "id": "590-118",
+            "name": "PROCESOS SANITARIOS",
+            "keywords": ["procesos sanitarios", "procesos sanitaris"]
+          },
+          {
+            "id": "598-006",
+            "name": "PROCEDIMIENTOS DE DIAGNÓSTICO CLÍNICO Y ORTOPROTÉSICO",
+            "keywords": ["diagnóstico clínico", "ortoprotésico", "diagnòstic clínic", "ortoprotèsic"]
+          },
+          {
+            "id": "598-007",
+            "name": "PROCEDIMIENTOS SANITARIOS Y ASISTENCIALES",
+            "keywords": ["sanitarios y asistenciales", "sanitaris i assistencials"]
+          }
+        ],
+        "events_monitored": ["apertura_bolsa", "oposicion", "adjudicacion_extraordinaria", "modificacion_listas"]
+      },
+      "boe": {
+        "scope": "Administración General del Estado",
+        "regime": "Personal Laboral Fijo (Convenio Único AGE)",
+        "track": "Promoción Interna",
+        "group": "M2",
+        "profiles": [
+          "M2 - Biología",
+          "M2 - Investigación (Biología)",
+          "M2 - Investigación (Biomedicina)"
+        ],
+        "destination_province": "Valencia",
+        "events_monitored": ["convocatoria", "plazos_inscripcion", "listas_admitidos", "adjudicacion"]
+      }
+    },
+    "job_radar": {
+      "enabled": true,
+      "scenarios": [
+        {
+          "type": "presential_part_time",
+          "objective": "Compaginar con Base Militar",
+          "max_hours_total": 20,
+          "allowed_centers": [
+            { "name": "Mas Camarena", "area": "Paterna / Bétera" },
+            { "name": "CEAC Burjassot", "area": "Burjassot" },
+            { "name": "Centros concertados/privados FP", "max_distance_km_from_home": 15 }
+          ]
+        },
+        {
+          "type": "remote_full_or_part",
+          "objective": "Flexibilidad total",
+          "modality": "100% Remoto",
+          "geographical_scope": "España",
+          "roles": ["Docencia online FP Sanidad", "Tutorías", "Elaboración de contenidos"]
+        },
+        {
+          "type": "presential_full_time",
+          "objective": "Cambio laboral",
+          "center_preference": "Concertados",
+          "geographical_scope": ["Camp de Túria", "Burjassot", "Valencia Ciudad"]
+        }
+      ]
+    },
+    "news_and_events": {
+      "enabled": true,
+      "feedback_enabled": true,
+      "max_audio_items": 2,
+      "topics": {
+        "local_events_and_culture": { "weight": 1.0, "scope": "Valencia / Camp de Túria" },
+        "traffic_and_incidents": { "weight": 1.5, "scope": "Rutas habituales y Valencia" },
+        "neuroscience_learning": { "weight": 1.2, "scope": "Educación / Neurociencia" },
+        "biomedicine_chemistry": { "weight": 1.1, "scope": "Avances científicos" },
+        "ai_edtech": { "weight": 1.0, "scope": "Tecnología aplicada" }
+      },
+      "feedback_history": []
+    }
+  }
+}
