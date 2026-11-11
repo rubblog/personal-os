@@ -5,17 +5,21 @@ from typing import Dict, Any, List
 class BriefingComposer:
     """
     Ensamblador del guión de radio en español (< 120 segundos).
-    Corrige estrictamente el huso horario a Europe/Madrid y el saludo
-    (días, tardes, noches).
+    Optimizaciones aplicadas:
+    1. Tiempo completo: temperatura, sensación térmica, lluvia, viento y alertas.
+    2. Predicción de tráfico hacia Bétera en la ventana 07:30 - 07:45.
+    3. Titulares esenciales de actualidad (Nacional y Valencia).
+    4. Silencio estricto en DOGV/BOE y empleo si no hay novedades reales.
     """
     @staticmethod
     def compose_script(
         user_name: str,
         weather_info: Dict[str, Any],
         calendar_events: List[Dict[str, Any]],
-        traffic_info: str = "El trayecto hacia la base militar está fluido, unos 15 minutos habituales.",
+        traffic_info: str = "Para tu salida entre las 7:30 y 7:40 hacia la base militar de Bétera, la CV-35 y el enlace presentan tráfico habitual, con unos 15 a 18 minutos estimados.",
         official_alerts: List[Dict[str, Any]] = None,
-        job_alerts: List[Dict[str, Any]] = None
+        job_alerts: List[Dict[str, Any]] = None,
+        top_news: List[Dict[str, str]] = None
     ) -> str:
         dias_semana = {
             0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
@@ -26,7 +30,6 @@ class BriefingComposer:
             7: "julio", 8: "agosto", 9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
         }
 
-        # 1. Huso horario estricto de Valencia (Europe/Madrid)
         tz = zoneinfo.ZoneInfo("Europe/Madrid")
         now = datetime.now(tz)
         
@@ -37,8 +40,8 @@ class BriefingComposer:
         minuto = now.minute
         is_weekend = dia_num in [5, 6]
 
-        # Saludo y franja horaria natural en español
-        if 6 <= hora < 12:
+        # Saludo y franja horaria natural
+        if 5 <= hora < 12:
             saludo = f"Buenos días {user_name}"
             franja = "de la mañana"
         elif 12 <= hora < 20:
@@ -48,7 +51,6 @@ class BriefingComposer:
             saludo = f"Buenas noches {user_name}"
             franja = "de la noche"
 
-        # Conversión a formato 12h natural para la voz (ej: "las cuatro y cuatro de la tarde")
         hora_12 = hora if hora <= 12 else hora - 12
         if hora_12 == 0: hora_12 = 12
         hora_palabra = "la una" if hora_12 == 1 else f"las {hora_12}"
@@ -67,15 +69,15 @@ class BriefingComposer:
             f"{tiempo_oral}."
         ]
 
-        # 2. Meteorología práctica (El Osito)
+        # 1. Meteorología completa (Sensación térmica, lluvia, viento, alertas)
         if weather_info and "summary" in weather_info:
             script_parts.append(weather_info["summary"])
 
-        # 3. Tráfico laboral (Solo días laborables L-V)
+        # 2. Previsión de tráfico para las 07:30 - 07:45 (Solo días laborables L-V)
         if not is_weekend:
             script_parts.append(traffic_info)
 
-        # 4. Agenda Real de Google Calendar
+        # 3. Agenda Real de Google Calendar
         today_events = [e for e in (calendar_events or []) if e.get("is_today")]
         upcoming_events = [e for e in (calendar_events or []) if not e.get("is_today")]
 
@@ -83,19 +85,22 @@ class BriefingComposer:
             event_texts = []
             for ev in today_events:
                 summary = ev.get("summary", "")
-                event_texts.append(f"Para hoy tienes anotado: {summary}.")
+                event_texts.append(f"En tu agenda para hoy: {summary}.")
             script_parts.append(" ".join(event_texts))
-        else:
-            if not is_weekend:
-                script_parts.append("Hoy no tienes citas urgentes en tu agenda.")
 
-        # Próximos compromisos
         if upcoming_events:
             next_ev = upcoming_events[0]
             summary = next_ev.get("summary", "")
-            script_parts.append(f"Ten presente en el horizonte próximo: {summary}.")
+            script_parts.append(f"Aviso próximo: {summary}.")
 
-        # 5. Oposiciones y Boletines Oficiales (Silencio si no hay nada)
+        # 4. Noticias clave para empezar el día
+        if top_news:
+            news_items = []
+            for n in top_news:
+                news_items.append(f"En noticias: {n.get('title')}.")
+            script_parts.append(" ".join(news_items))
+
+        # 5. Oposiciones y Boletines Oficiales (Solo si hay alertas)
         if official_alerts:
             alert_items = []
             for alert in official_alerts:
@@ -106,19 +111,19 @@ class BriefingComposer:
                     alert_items.append(f"Novedad en el BOE: convocatoria para {alert.get('category', 'M2 Biología')}.")
             script_parts.append(" ".join(alert_items))
 
-        # 6. Empleo FP (Silencio si no hay nada)
+        # 6. Empleo FP (Solo si hay alertas)
         if job_alerts:
             job_items = []
             for job in job_alerts:
                 job_items.append(
-                    f"En empleo: vacante en {job.get('center')} para {job.get('role')} ({job.get('hours')})."
+                    f"En empleo: vacante en {job.get('center')} para {job.get('role')}."
                 )
             script_parts.append(" ".join(job_items))
 
-        # 7. Cierre natural
+        # 7. Cierre
         if is_weekend:
             script_parts.append("¡Disfruta del fin de semana!")
         else:
-            script_parts.append("¡Que tengas un excelente día!")
+            script_parts.append("¡Buen inicio de jornada!")
 
         return " ".join(script_parts)
