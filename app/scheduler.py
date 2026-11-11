@@ -9,6 +9,7 @@ from app.services.weather import WeatherService
 from app.services.calendar import CalendarService
 from app.services.bulletins import BulletinsService
 from app.services.job_radar import JobRadarService
+from app.services.news import NewsService
 from app.services.tts import TTSService
 from app.services.composer import BriefingComposer
 
@@ -21,11 +22,12 @@ latest_briefing_state: Dict[str, Any] = {
     "weather": None,
     "events": [],
     "official_alerts": [],
-    "job_alerts": []
+    "job_alerts": [],
+    "top_news": []
 }
 
 async def execute_briefing_generation():
-    """Ejecuta el pipeline completo de madrugada: Datos -> Filtros -> Locución -> Audio."""
+    """Ejecuta el pipeline completo a las 07:00 AM: Datos -> Clima -> Tráfico 07:30 -> Noticias -> Audio."""
     now = datetime.now()
     logger.info(f"Iniciando pipeline integral a las {now.strftime('%H:%M:%S')}...")
 
@@ -41,11 +43,11 @@ async def execute_briefing_generation():
     dogv_rules = modules_cfg.get("official_bulletins", {}).get("dogv", {})
     job_rules = modules_cfg.get("job_radar", {})
 
-    # 1. Clima Práctico
+    # 1. Clima de Alta Precisión (El Osito: Temp, Sensación térmica, Lluvia, Viento, Alertas)
     weather_svc = WeatherService(lat=home_lat, lon=home_lon, rules=weather_rules)
     weather_data = weather_svc.get_morning_forecast()
 
-    # 2. Agenda
+    # 2. Agenda Google Calendar
     cal_svc = CalendarService()
     calendar_events = cal_svc.get_today_events()
 
@@ -53,24 +55,28 @@ async def execute_briefing_generation():
     bulletins_svc = BulletinsService(boe_rules=boe_rules, dogv_rules=dogv_rules)
     official_alerts = bulletins_svc.scan_all_official_bulletins()
 
-    # 4. Radar de Empleo FP y Remoto
+    # 4. Radar de Empleo FP
     job_svc = JobRadarService(job_rules=job_rules)
     job_alerts = job_svc.scan_job_opportunities()
 
-    # 5. Composición del Guión
+    # 5. Noticias más relevantes del día (Nacional y Valencia)
+    top_news = NewsService.get_top_news(max_items=2)
+
+    # 6. Composición del Guión
     script = BriefingComposer.compose_script(
         user_name=user_name,
         weather_info=weather_data,
         calendar_events=calendar_events,
         official_alerts=official_alerts,
-        job_alerts=job_alerts
+        job_alerts=job_alerts,
+        top_news=top_news
     )
 
-    # 6. Síntesis de Audio TTS
+    # 7. Síntesis de Audio Neuronal TTS
     tts_svc = TTSService()
     audio_path = await tts_svc.generate_audio_file(script)
 
-    # 7. Actualización del Estado
+    # 8. Estado para la PWA
     latest_briefing_state.update({
         "generated_at": now.isoformat(),
         "script_text": script,
@@ -78,10 +84,11 @@ async def execute_briefing_generation():
         "weather": weather_data,
         "events": calendar_events,
         "official_alerts": official_alerts,
-        "job_alerts": job_alerts
+        "job_alerts": job_alerts,
+        "top_news": top_news
     })
 
-    logger.info("Pipeline matinal finalizado con éxito. Audio y alertas listos.")
+    logger.info("Pipeline matinal finalizado con éxito.")
     return latest_briefing_state
 
 def run_daily_briefing_pipeline():
