@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import zoneinfo
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any
@@ -27,9 +28,10 @@ latest_briefing_state: Dict[str, Any] = {
 }
 
 async def execute_briefing_generation():
-    """Ejecuta el pipeline completo a las 07:00 AM: Datos -> Clima -> Tráfico 07:30 -> Noticias -> Audio."""
-    now = datetime.now()
-    logger.info(f"Iniciando pipeline integral a las {now.strftime('%H:%M:%S')}...")
+    """Ejecuta el pipeline con hora exacta en zona Europe/Madrid."""
+    tz = zoneinfo.ZoneInfo("Europe/Madrid")
+    now = datetime.now(tz)
+    logger.info(f"Iniciando pipeline integral a las {now.strftime('%H:%M:%S')} (Europe/Madrid)...")
 
     profile = settings.load_profile()
     user_name = profile.get("user", {}).get("name", "Rubén")
@@ -43,7 +45,7 @@ async def execute_briefing_generation():
     dogv_rules = modules_cfg.get("official_bulletins", {}).get("dogv", {})
     job_rules = modules_cfg.get("job_radar", {})
 
-    # 1. Clima de Alta Precisión (El Osito: Temp, Sensación térmica, Lluvia, Viento, Alertas)
+    # 1. Clima de Alta Precisión
     weather_svc = WeatherService(lat=home_lat, lon=home_lon, rules=weather_rules)
     weather_data = weather_svc.get_morning_forecast()
 
@@ -51,7 +53,7 @@ async def execute_briefing_generation():
     cal_svc = CalendarService()
     calendar_events = cal_svc.get_today_events()
 
-    # 3. Radar de Boletines Oficiales (BOE / DOGV)
+    # 3. Radar de Boletines Oficiales
     bulletins_svc = BulletinsService(boe_rules=boe_rules, dogv_rules=dogv_rules)
     official_alerts = bulletins_svc.scan_all_official_bulletins()
 
@@ -59,7 +61,7 @@ async def execute_briefing_generation():
     job_svc = JobRadarService(job_rules=job_rules)
     job_alerts = job_svc.scan_job_opportunities()
 
-    # 5. Noticias más relevantes del día (Nacional y Valencia)
+    # 5. Noticias más relevantes
     top_news = NewsService.get_top_news(max_items=2)
 
     # 6. Composición del Guión
@@ -76,7 +78,7 @@ async def execute_briefing_generation():
     tts_svc = TTSService()
     audio_path = await tts_svc.generate_audio_file(script)
 
-    # 8. Estado para la PWA
+    # 8. Estado para la PWA con ISO string garantizado en Europe/Madrid
     latest_briefing_state.update({
         "generated_at": now.isoformat(),
         "script_text": script,
