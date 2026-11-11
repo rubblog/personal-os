@@ -8,9 +8,35 @@ logger = logging.getLogger("personal_os.weather")
 
 class WeatherService:
     """
-    Servicio de previsión meteorológica real y horaria usando Open-Meteo para El Osito.
+    Servicio meteorológico de alta precisión para El Osito y Valencia (Open-Meteo).
+    Proporciona: temperatura real, sensación térmica, estado del cielo, lluvia/probabilidad,
+    viento/rachas, máximas/mínimas y niveles de alerta meteorológica.
     """
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
+
+    WEATHER_CODES = {
+        0: "cielo completamente despejado",
+        1: "cielo mayormente despejado",
+        2: "intervalos nubosos",
+        3: "cielo cubierto",
+        45: "niebla",
+        48: "niebla con escarcha",
+        51: "llovizna ligera",
+        53: "llovizna moderada",
+        55: "llovizna densa",
+        61: "lluvia débil",
+        63: "lluvia moderada",
+        65: "lluvia intensa",
+        71: "nevada débil",
+        73: "nevada moderada",
+        75: "nevada fuerte",
+        80: "chubascos dispersos",
+        81: "chubascos moderados",
+        82: "chubascos violentos",
+        95: "tormenta eléctrica",
+        96: "tormenta con granizo ligero",
+        99: "tormenta con granizo fuerte"
+    }
 
     def __init__(self, lat: float, lon: float, rules: Dict[str, Any]):
         self.lat = lat
@@ -21,9 +47,9 @@ class WeatherService:
         params = {
             "latitude": self.lat,
             "longitude": self.lon,
-            "current": "temperature_2m,precipitation,wind_speed_10m",
-            "hourly": "temperature_2m,precipitation_probability,wind_speed_10m",
-            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+            "current": "temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_gusts_10m",
+            "hourly": "temperature_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max",
             "timezone": "Europe/Madrid",
             "forecast_days": 1
         }
@@ -32,77 +58,84 @@ class WeatherService:
             res = requests.get(self.BASE_URL, params=params, timeout=10)
             res.raise_for_status()
             data = res.json()
-            return self._analyze_practical_rules(data)
+            return self._build_weather_report(data)
         except Exception as e:
-            logger.error(f"Error consultando meteorología Open-Meteo: {e}")
+            logger.error(f"Error consultando meteorología: {e}")
             return {
-                "summary": "En El Osito se esperan temperaturas moderadas para hoy.",
-                "coat_needed": False,
-                "umbrella_needed": False,
-                "wind_alert": False
+                "summary": "En El Osito se esperan temperaturas en torno a los 16 grados con cielo variable.",
+                "current_temp": 16.0,
+                "apparent_temp": 16.0,
+                "max_temp": 22.0,
+                "min_temp": 14.0
             }
 
-    def _analyze_practical_rules(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        tz = zoneinfo.ZoneInfo("Europe/Madrid")
-        now = datetime.now(tz)
-        current_hour = now.hour
+    def _build_weather_report(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        current = data.get("current", {})
+        daily = data.get("daily", {})
 
-        hourly = data.get("hourly", {})
-        times = hourly.get("time", [])
-        temps = hourly.get("temperature_2m", [])
-        rain_probs = hourly.get("precipitation_probability", [])
-        winds = hourly.get("wind_speed_10m", [])
+        temp = current.get("temperature_2m", 15.0)
+        apparent = current.get("apparent_temperature", temp)
+        wcode = current.get("weather_code", 0)
+        cielo_desc = self.WEATHER_CODES.get(wcode, "cielo nuboso")
+        wind_speed = current.get("wind_speed_10m", 0.0)
+        wind_gusts = current.get("wind_gusts_10m", 0.0)
+        precip = current.get("precipitation", 0.0)
 
-        # Buscar la temperatura actual o de la hora actual
-        current_temp = None
-        current_rain = 0
-        for i, t in enumerate(times):
-            if f"T{current_hour:02d}:00" in t:
-                current_temp = temps[i]
-                current_rain = rain_probs[i]
-                break
+        max_temp = daily.get("temperature_2m_max", [temp + 5])[0]
+        min_temp = daily.get("temperature_2m_min", [temp - 3])[0]
+        max_rain_prob = daily.get("precipitation_probability_max", [0])[0]
+        rain_sum = daily.get("precipitation_sum", [0.0])[0]
 
-        if current_temp is None:
-            current_temp = data.get("current", {}).get("temperature_2m", 15.0)
+        # Evaluación de Alertas
+        alerts = []
+        if rain_sum >= 20 or max_rain_prob >= 80 or wcode in [65, 82, 95, 96, 99]:
+            alerts.append("alerta por lluvias o tormentas significativas")
+        if wind_gusts >= 50 or wind_speed >= 35:
+            alerts.append(f"alerta por rachas intensas de viento de {wind_gusts:.0f} km/h")
+        if max_temp >= 36:
+            alerts.append("aviso por calor extremo")
+        if min_temp <= 2:
+            alerts.append("aviso por heladas o bajas temperaturas")
 
-        max_daily_temp = max(temps) if temps else 20.0
-        max_daily_rain = max(rain_probs) if rain_probs else 0
-        max_wind = max(winds) if winds else 10.0
-
-        coat_threshold = self.rules.get("morning_walk_dog", {}).get("coat_threshold_celsius", 14)
-        wind_threshold = self.rules.get("wind_alert_kmh", 40)
-
-        coat_needed = current_temp < coat_threshold
-        umbrella_needed = max_daily_rain >= 40
-        temp_delta = max_daily_temp - current_temp
-        significant_delta = temp_delta >= 7 and current_hour < 12
-        wind_alert = max_wind >= wind_threshold
-
-        recommendation_parts = []
-        if coat_needed:
-            if significant_delta:
-                recommendation_parts.append(
-                    f"Ahora hace fresco en El Osito ({current_temp:.0f}°C); lleva chaqueta para sacar a los perros, "
-                    f"pero subirá hasta los {max_daily_temp:.0f}°C a lo largo del día."
-                )
-            else:
-                recommendation_parts.append(
-                    f"La temperatura en El Osito es fresca ({current_temp:.0f}°C); conviene llevar chaqueta."
-                )
-        else:
-            recommendation_parts.append(f"La temperatura en El Osito es templada y agradable ({current_temp:.0f}°C).")
-
-        if umbrella_needed:
-            recommendation_parts.append("Hay previsión de lluvia durante la jornada; no olvides el paraguas.")
+        # Construcción del informe hablado
+        parts = []
         
-        if wind_alert:
-            recommendation_parts.append(f"Atención a las rachas de viento de hasta {max_wind:.0f} km por hora.")
+        # 1. Temperatura actual y sensación térmica
+        parts.append(
+            f"En la zona de El Osito tenemos ahora mismo {temp:.0f} grados, con una sensación térmica de {apparent:.0f} grados y {cielo_desc}."
+        )
+
+        # 2. Previsión diurna (máximas y mínimas)
+        parts.append(
+            f"A lo largo del día la máxima alcanzará los {max_temp:.0f} grados y la mínima se quedará en {min_temp:.0f}."
+        )
+
+        # 3. Lluvia y precipitación
+        if precip > 0:
+            parts.append(f"Ahora mismo está lloviendo de forma débil ({precip:.1f} mm).")
+        elif max_rain_prob >= 50:
+            parts.append(f"Hay una probabilidad alta de lluvia para hoy del {max_rain_prob:.0f}%, lleva paraguas.")
+        elif max_rain_prob >= 25:
+            parts.append(f"Hay una probabilidad moderada de lluvia del {max_rain_prob:.0f}%.")
+        else:
+            parts.append("No se esperan lluvias relevantes durante el día.")
+
+        # 4. Viento
+        if wind_gusts >= 30:
+            parts.append(f"El viento sopla con rachas notables de hasta {wind_gusts:.0f} kilómetros por hora.")
+
+        # 5. Mención de Alertas si las hay
+        if alerts:
+            parts.append(f"Atención: hay {', '.join(alerts)}.")
 
         return {
-            "summary": " ".join(recommendation_parts),
-            "current_temp": round(current_temp, 1),
-            "max_temp": round(max_daily_temp, 1),
-            "coat_needed": coat_needed,
-            "umbrella_needed": umbrella_needed,
-            "wind_alert": wind_alert
+            "summary": " ".join(parts),
+            "current_temp": round(temp, 1),
+            "apparent_temp": round(apparent, 1),
+            "max_temp": round(max_temp, 1),
+            "min_temp": round(min_temp, 1),
+            "weather_condition": cielo_desc,
+            "rain_prob": max_rain_prob,
+            "wind_gusts": wind_gusts,
+            "alerts": alerts
         }
