@@ -1,15 +1,15 @@
 import json
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Dict, Any
 
 logger = logging.getLogger("personal_os.config")
 
 class Settings(BaseModel):
     profile_path: Path = Path("user_profile.json")
-    briefing_hour: int = 6
-    briefing_minute: int = 15
+    briefing_hour: int = 7
+    briefing_minute: int = 0
     timezone: str = "Europe/Madrid"
 
     def load_profile(self) -> Dict[str, Any]:
